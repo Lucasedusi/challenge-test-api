@@ -1,18 +1,17 @@
-import { CreateStatementError } from "./CreateStatementError";
-import { InMemoryStatementsRepository } from "../../repositories/in-memory/InMemoryStatementsRepository";
+import { Statement } from "./../../entities/Statement";
+import { OperationType } from "@modules/statements/entities/Statement";
 import { CreateStatementUseCase } from "./CreateStatementUseCase";
-
+import { ICreateStatementDTO } from "./ICreateStatementDTO";
+import { CreateStatementError } from "./CreateStatementError";
+import { ICreateUserDTO } from "../../../users/useCases/createUser/ICreateUserDTO";
+import { CreateUserUseCase } from "../../../users/useCases/createUser/CreateUserUseCase";
 import { InMemoryUsersRepository } from "../../../users/repositories/in-memory/InMemoryUsersRepository";
+import { InMemoryStatementsRepository } from "../../repositories/in-memory/InMemoryStatementsRepository";
 
-let statementsRepositoryInMemory: InMemoryStatementsRepository;
-let usersRepositoryInMemory: InMemoryUsersRepository;
-
+let createUserUseCase: CreateUserUseCase;
 let createStatementUseCase: CreateStatementUseCase;
-
-enum OperationType {
-  DEPOSIT = "deposit",
-  WITHDRAW = "withdraw",
-}
+let usersRepositoryInMemory: InMemoryUsersRepository;
+let statementsRepositoryInMemory: InMemoryStatementsRepository;
 
 describe("Create Statement", () => {
   beforeEach(() => {
@@ -22,60 +21,108 @@ describe("Create Statement", () => {
       usersRepositoryInMemory,
       statementsRepositoryInMemory
     );
+    createUserUseCase = new CreateUserUseCase(usersRepositoryInMemory);
   });
 
-  it("Should be able to create a statement", async () => {
-    const userDTO = {
-      name: "LucasPRTE",
-      email: "lucasprte@email.com",
-      password: "lucas123",
+  it("should be able to make deposit", async () => {
+    const user: ICreateUserDTO = {
+      email: "user@teste.com",
+      password: "1234",
+      name: "User Test",
     };
 
-    const user = await usersRepositoryInMemory.create(userDTO);
+    const userCreated = await createUserUseCase.execute(user);
 
-    const statementDTO = {
-      user_id: user.id as string,
-      type: OperationType.DEPOSIT,
-      description: "teste de deposito",
-      amount: 300,
+    expect(userCreated).toHaveProperty("id");
+    const user_id = userCreated.id as string;
+
+    const deposit: ICreateStatementDTO = {
+      user_id,
+      type: "deposit" as OperationType,
+      amount: 100,
+      description: "DINDIN",
     };
 
-    const statement = await createStatementUseCase.execute(statementDTO);
+    const resultDeposit = await createStatementUseCase.execute(deposit);
 
-    expect(statement).toHaveProperty("id");
+    expect(resultDeposit).toHaveProperty("id");
+    expect(resultDeposit.user_id).toEqual(user_id);
+    expect(resultDeposit.amount).toEqual(deposit.amount);
+    expect(resultDeposit.type).toEqual(deposit.type);
   });
 
-  it("Shouldn't be able to create a statement to a non-existent user", async () => {
+  it("should be able to make withdraw", async () => {
+    const user: ICreateUserDTO = {
+      email: "user@teste.com",
+      password: "1234",
+      name: "User Test",
+    };
+
+    const userCreated = await createUserUseCase.execute(user);
+
+    expect(userCreated).toHaveProperty("id");
+    const user_id = userCreated.id as string;
+
+    const deposit: ICreateStatementDTO = {
+      user_id,
+      type: "deposit" as OperationType,
+      amount: 100,
+      description: "DINDIN",
+    };
+
+    await createStatementUseCase.execute(deposit);
+
+    const withdraw: ICreateStatementDTO = {
+      user_id,
+      type: "withdraw" as OperationType,
+      amount: 100,
+      description: "DINDIN",
+    };
+
+    const resultWithdraw = await createStatementUseCase.execute(withdraw);
+
+    expect(resultWithdraw).toBeInstanceOf(Statement);
+    expect(resultWithdraw).toHaveProperty("id");
+    expect(resultWithdraw.user_id).toEqual(user_id);
+    expect(resultWithdraw.type).toEqual(withdraw.type);
+    expect(resultWithdraw.amount).toEqual(withdraw.amount);
+  });
+
+  it("should not be able to deposit/withdraw with non-existing user", async () => {
     expect(async () => {
-      const statementDTO = {
-        user_id: "fake_user_id",
-        type: OperationType.DEPOSIT,
-        description: "teste de deposito",
-        amount: 300,
+      const user_id = "Non_existing_user-345676473";
+      const deposit: ICreateStatementDTO = {
+        user_id,
+        type: "deposit" as OperationType,
+        amount: 100,
+        description: "DINDIN",
       };
 
-      const statement = await createStatementUseCase.execute(statementDTO);
+      await createStatementUseCase.execute(deposit);
     }).rejects.toBeInstanceOf(CreateStatementError.UserNotFound);
   });
 
-  it("Shouldn't be able to create a statement withdraw greater than the balance", async () => {
+  it("should not be able to withdraw without money", async () => {
     expect(async () => {
-      const userDTO = {
-        name: "LucasPRTE",
-        email: "lucasprte@email.com",
-        password: "lucas123",
+      const user: ICreateUserDTO = {
+        email: "1user@teste.com",
+        password: "1234",
+        name: "User Test",
       };
 
-      const user = await usersRepositoryInMemory.create(userDTO);
+      const userCreated = await createUserUseCase.execute(user);
 
-      const statementDTO = {
-        user_id: user.id as string,
-        type: OperationType.WITHDRAW,
-        description: "testando depósito",
-        amount: 10,
+      expect(userCreated).toHaveProperty("id");
+      const user_id = userCreated.id as string;
+
+      const withdraw: ICreateStatementDTO = {
+        user_id,
+        type: "withdraw" as OperationType,
+        amount: 100,
+        description: "DINDIN",
       };
 
-      const statement = await createStatementUseCase.execute(statementDTO);
+      await createStatementUseCase.execute(withdraw);
     }).rejects.toBeInstanceOf(CreateStatementError.InsufficientFunds);
   });
 });

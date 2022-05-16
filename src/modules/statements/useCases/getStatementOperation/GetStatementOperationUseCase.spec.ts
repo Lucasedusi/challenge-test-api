@@ -1,20 +1,20 @@
-import { GetStatementOperationError } from "./GetStatementOperationError";
+import { OperationType } from "@modules/statements/entities/Statement";
+import { InMemoryUsersRepository } from "../../../users/repositories/in-memory/InMemoryUsersRepository";
+import { CreateUserUseCase } from "../../../users/useCases/createUser/CreateUserUseCase";
+import { ICreateUserDTO } from "../../../users/useCases/createUser/ICreateUserDTO";
 import { InMemoryStatementsRepository } from "../../repositories/in-memory/InMemoryStatementsRepository";
+import { CreateStatementUseCase } from "../createStatement/CreateStatementUseCase";
+import { ICreateStatementDTO } from "../createStatement/ICreateStatementDTO";
+import { GetStatementOperationError } from "./GetStatementOperationError";
 import { GetStatementOperationUseCase } from "./GetStatementOperationUseCase";
 
-import { InMemoryUsersRepository } from "../../../users/repositories/in-memory/InMemoryUsersRepository";
-
-let statementsRepositoryInMemory: InMemoryStatementsRepository;
-let usersRepositoryInMemory: InMemoryUsersRepository;
-
+let createUserUseCase: CreateUserUseCase;
 let getStatementOperationUseCase: GetStatementOperationUseCase;
+let createStatementUseCase: CreateStatementUseCase;
+let usersRepositoryInMemory: InMemoryUsersRepository;
+let statementsRepositoryInMemory: InMemoryStatementsRepository;
 
-enum OperationType {
-  DEPOSIT = "deposit",
-  WITHDRAW = "withdraw",
-}
-
-describe("Get Statement Operation", () => {
+describe("Get Balance", () => {
   beforeEach(() => {
     statementsRepositoryInMemory = new InMemoryStatementsRepository();
     usersRepositoryInMemory = new InMemoryUsersRepository();
@@ -22,73 +22,77 @@ describe("Get Statement Operation", () => {
       usersRepositoryInMemory,
       statementsRepositoryInMemory
     );
+    createStatementUseCase = new CreateStatementUseCase(
+      usersRepositoryInMemory,
+      statementsRepositoryInMemory
+    );
+    createUserUseCase = new CreateUserUseCase(usersRepositoryInMemory);
   });
-  it("Should be able to get a statement operation", async () => {
-    const userDTO = {
-      name: "Lucas PRTE",
-      email: "lucasprte@email.com",
-      password: "123senha",
-    };
-    const user = await usersRepositoryInMemory.create(userDTO);
 
-    const statementDTO = {
-      user_id: user.id as string,
-      type: OperationType.DEPOSIT,
-      description: "teste de deposito",
-      amount: 300,
+  it("should be able to get statement", async () => {
+    const user: ICreateUserDTO = {
+      email: "user@teste.com",
+      password: "1234",
+      name: "User Test",
     };
-    const statement = await statementsRepositoryInMemory.create(statementDTO);
 
-    const response = await getStatementOperationUseCase.execute({
-      user_id: user.id as string,
-      statement_id: statement.id as string,
+    const userCreated = await createUserUseCase.execute(user);
+
+    expect(userCreated).toHaveProperty("id");
+    const user_id = userCreated.id as string;
+
+    const deposit: ICreateStatementDTO = {
+      user_id,
+      type: "deposit" as OperationType,
+      amount: 100,
+      description: "DINDIN",
+    };
+
+    const resultDeposit = await createStatementUseCase.execute(deposit);
+
+    expect(resultDeposit).toHaveProperty("id");
+    const statement_id = resultDeposit.id as string;
+
+    const resultStatement = await getStatementOperationUseCase.execute({
+      user_id,
+      statement_id,
     });
 
-    expect(response.amount).toBe(300);
-    expect(response.description).toBe("teste de deposito");
+    expect(resultStatement).toHaveProperty("id");
+    expect(resultStatement.id).toEqual(statement_id);
+    expect(resultStatement.user_id).toEqual(user_id);
+    expect(resultStatement.type).toEqual(deposit.type);
+    expect(resultStatement.amount).toEqual(deposit.amount);
   });
 
-  it("Shouldn't be able to get statement operation of a non-existent user", async () => {
+  it("should be not able to get statement from non-existing user", async () => {
     expect(async () => {
-      const userDTO = {
-        name: "Lucas PRTE",
-        email: "lucasprte@email.com",
-        password: "123senha",
-      };
-      const user = await usersRepositoryInMemory.create(userDTO);
-
-      const statementDTO = {
-        user_id: user.id as string,
-        type: OperationType.DEPOSIT,
-        description: "teste de depósito",
-        amount: 300,
-      };
-      const statement = await statementsRepositoryInMemory.create(statementDTO);
+      const user_id = "Non-existing-user-732123789";
+      const statement_id = "Non-existing-statement-732123789";
       await getStatementOperationUseCase.execute({
-        user_id: "fake_id",
-        statement_id: statement.id as string,
+        user_id,
+        statement_id,
       });
     }).rejects.toBeInstanceOf(GetStatementOperationError.UserNotFound);
   });
-  it("Shouldn't be able to get statement operation of a non-existent statement", async () => {
-    expect(async () => {
-      const userDTO = {
-        name: "Lucas PRTE",
-        email: "lucasprte@email.com",
-        password: "123senha",
-      };
-      const user = await usersRepositoryInMemory.create(userDTO);
 
-      const statementDTO = {
-        user_id: user.id as string,
-        type: OperationType.DEPOSIT,
-        description: "teste de depósito",
-        amount: 300,
+  it("should be not able to get non-existing statement", async () => {
+    expect(async () => {
+      const user: ICreateUserDTO = {
+        email: "user@teste.com",
+        password: "1234",
+        name: "User Test",
       };
-      const statement = await statementsRepositoryInMemory.create(statementDTO);
+
+      const userCreated = await createUserUseCase.execute(user);
+
+      expect(userCreated).toHaveProperty("id");
+      const user_id = userCreated.id as string;
+      const statement_id = "Non-existing-statement-732123789";
+
       await getStatementOperationUseCase.execute({
-        user_id: user.id as string,
-        statement_id: "fake_id",
+        user_id,
+        statement_id,
       });
     }).rejects.toBeInstanceOf(GetStatementOperationError.StatementNotFound);
   });

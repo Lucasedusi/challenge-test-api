@@ -1,54 +1,63 @@
-import { GetBalanceError } from "./GetBalanceError";
-import { InMemoryStatementsRepository } from "../../repositories/in-memory/InMemoryStatementsRepository";
+import { OperationType } from "./../../entities/Statement";
+import { CreateUserUseCase } from "./../../../users/useCases/createUser/CreateUserUseCase";
+import { InMemoryStatementsRepository } from "./../../repositories/in-memory/InMemoryStatementsRepository";
+import { InMemoryUsersRepository } from "./../../../users/repositories/in-memory/InMemoryUsersRepository";
 import { GetBalanceUseCase } from "./GetBalanceUseCase";
-
-import { InMemoryUsersRepository } from "../../../users/repositories/in-memory/InMemoryUsersRepository";
-
-let statementsRepositoryInMemory: InMemoryStatementsRepository;
-let usersRepositoryInMemory: InMemoryUsersRepository;
+import { CreateStatementUseCase } from "../createStatement/CreateStatementUseCase";
+import { GetBalanceError } from "./GetBalanceError";
+import { ICreateUserDTO } from "../../../users/useCases/createUser/ICreateUserDTO";
 
 let getBalanceUseCase: GetBalanceUseCase;
-
-enum OperationType {
-  DEPOSIT = "deposit",
-  WITHDRAW = "withdraw",
-}
+let createUserUseCase: CreateUserUseCase;
+let createStatementUseCase: CreateStatementUseCase;
+let usersRepositoryInMemory: InMemoryUsersRepository;
+let statementsRepositoryInMemory: InMemoryStatementsRepository;
 
 describe("Get Balance", () => {
   beforeEach(() => {
     statementsRepositoryInMemory = new InMemoryStatementsRepository();
     usersRepositoryInMemory = new InMemoryUsersRepository();
+    createStatementUseCase = new CreateStatementUseCase(
+      usersRepositoryInMemory,
+      statementsRepositoryInMemory
+    );
     getBalanceUseCase = new GetBalanceUseCase(
       statementsRepositoryInMemory,
       usersRepositoryInMemory
     );
+    createUserUseCase = new CreateUserUseCase(usersRepositoryInMemory);
   });
-  it("Should be able to get the balance", async () => {
-    const userDTO = {
-      name: "Lucas PRTE",
-      email: "lucasprte@email.com",
-      password: "123senha",
-    };
-    const user = await usersRepositoryInMemory.create(userDTO);
 
-    const statementDTO = {
-      user_id: user.id as string,
-      type: OperationType.DEPOSIT,
-      description: "Test Depósito",
-      amount: 300,
+  it("should be able to get balance", async () => {
+    const user: ICreateUserDTO = {
+      email: "user@teste.com",
+      password: "1234",
+      name: "User Test",
     };
-    const statement = await statementsRepositoryInMemory.create(statementDTO);
 
-    const response = await getBalanceUseCase.execute({
-      user_id: user.id as string,
+    const userCreated = await createUserUseCase.execute(user);
+
+    expect(userCreated).toHaveProperty("id");
+    const user_id = userCreated.id as string;
+
+    await createStatementUseCase.execute({
+      user_id,
+      type: "deposit" as OperationType,
+      amount: 100,
+      description: "DINDIN",
     });
 
-    expect(response.balance).toBe(300);
+    const balance = await getBalanceUseCase.execute({ user_id });
+
+    expect(balance.statement[0]).toHaveProperty("id");
+    expect(balance.statement.length).toBe(1);
+    expect(balance.balance).toEqual(100);
   });
 
-  it("Shouldn't be able to get balance of a non-existent user", async () => {
+  it("should not be able to get balance from non-existing user", async () => {
     expect(async () => {
-      await getBalanceUseCase.execute({ user_id: "fake_id" });
+      const user_id = "user_non_existent";
+      await getBalanceUseCase.execute({ user_id });
     }).rejects.toBeInstanceOf(GetBalanceError);
   });
 });
